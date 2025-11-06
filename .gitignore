@@ -1,17 +1,20 @@
-# Dependências (isto é o mais importante!)
+# Dependências do Node.js
 node_modules/
 
-# Ficheiro de segredos - NUNCA ENVIE ISTO PARA O GITHUB
+# Ficheiro de segredos e senhas
+# MUITO IMPORTANTE: Impede que as suas senhas vazem para o GitHub
 .env
 
-# Logs
+# Logs e ficheiros temporários
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Ficheiros de IDE e Sistema
+# Ficheiros de Sistema Operacional
 .DS_Store
+
+# Ficheiros de IDE
 .idea/
 .vscode/
