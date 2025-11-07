@@ -38,7 +38,6 @@ const Event = mongoose.model('Event', EventSchema);
 
 
 // --- ROTA DE TESTE ---
-// Adicione esta rota para verificar se os logs em tempo real estão a funcionar
 app.get('/api/test', (req, res) => {
   console.log('!!!!!!!!!! O TESTE /api/test FOI EXECUTADO !!!!!!!!!!');
   res.status(200).json({ message: 'O servidor está vivo e a responder!' });
@@ -52,24 +51,34 @@ app.post('/api/users/register', async (req, res) => {
     const { name, email, password, birthDate } = req.body;
     let dateObject;
 
-    // --- INÍCIO DA CORREÇÃO DEFENSIVA ---
-    // 1. Verificar se 'birthDate' foi enviado e é uma string
+    // --- INÍCIO DA CORREÇÃO FINAL DA DATA ---
     if (!birthDate || typeof birthDate !== 'string') {
-        console.error('Erro em /api/users/register: birthDate não foi fornecida ou não é uma string.');
-        // 400 Bad Request (Erro do Cliente), é melhor que 500 (Erro do Servidor)
+        console.error('Erro em /api/users/register: birthDate não foi fornecida.');
         return res.status(400).json({ message: 'Data de nascimento é obrigatória.' });
     }
 
-    // 2. Tentar converter a data
-    const parts = birthDate.split('/');
-    if (parts.length !== 3) {
-        console.error(`Erro em /api/users/register: Formato de data inválido. Recebido: ${birthDate}`);
-        return res.status(400).json({ message: 'Formato de data inválido. Use DD/MM/AAAA.' });
+    if (birthDate.includes('-')) {
+        // Formato ISO (AAAA-MM-DD...) - O new Date() entende isto diretamente!
+        console.log('A processar data em formato ISO (com -)');
+        dateObject = new Date(birthDate);
+    } else if (birthDate.includes('/')) {
+        // Formato DD/MM/AAAA
+        console.log('A processar data em formato DD/MM/AAAA (com /)');
+        const parts = birthDate.split('/');
+        if (parts.length === 3) {
+            // new Date(ano, mês-1, dia)
+            dateObject = new Date(parts[2], parts[1] - 1, parts[0]);
+        } else {
+            console.error(`Erro em /api/users/register: Formato de data (com /) inválido. Recebido: ${birthDate}`);
+            return res.status(400).json({ message: 'Formato de data inválido. Use DD/MM/AAAA.' });
+        }
+    } else {
+        // Formato desconhecido
+        console.error(`Erro em /api/users/register: Formato de data totalmente desconhecido. Recebido: ${birthDate}`);
+        return res.status(400).json({ message: 'Formato de data desconhecido.' });
     }
-    
-    // O formato é new Date(ano, mês_indexado_em_zero, dia)
-    dateObject = new Date(parts[2], parts[1] - 1, parts[0]);
-    // --- FIM DA CORREÇÃO DEFENSIVA ---
+    // --- FIM DA CORREÇÃO FINAL DA DATA ---
+
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -78,12 +87,10 @@ app.post('/api/users/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // 3. Usamos o 'dateObject' corrigido aqui
     const newUser = new User({ name, email, password: hashedPassword, birthDate: dateObject }); 
     await newUser.save();
     res.status(201).json({ message: 'Utilizador criado com sucesso!' });
   } catch (error) {
-    // Agora, se quebrar aqui, é um erro inesperado
     console.error('Erro em /api/users/register (catch final):', error);
     res.status(500).json({ message: 'Erro no servidor', error: error.message });
   }
@@ -117,18 +124,33 @@ app.post('/api/users/verify-identity', async (req, res) => {
         const { email, birthDate } = req.body;
         let dateObject;
 
-        // --- INÍCIO DA CORREÇÃO DEFENSIVA ---
+        // --- INÍCIO DA CORREÇÃO FINAL DA DATA ---
         if (!birthDate || typeof birthDate !== 'string') {
             console.error('Erro em /api/users/verify-identity: birthDate não foi fornecida.');
             return res.status(400).json({ message: 'Data de nascimento é obrigatória.' });
         }
-        const parts = birthDate.split('/');
-        if (parts.length !== 3) {
-            console.error(`Erro em /api/users/verify-identity: Formato de data inválido. Recebido: ${birthDate}`);
-            return res.status(400).json({ message: 'Formato de data inválido. Use DD/MM/AAAA.' });
+
+        if (birthDate.includes('-')) {
+            // Formato ISO (AAAA-MM-DD...)
+            console.log('A processar data em formato ISO (com -)');
+            dateObject = new Date(birthDate);
+        } else if (birthDate.includes('/')) {
+            // Formato DD/MM/AAAA
+            console.log('A processar data em formato DD/MM/AAAA (com /)');
+            const parts = birthDate.split('/');
+            if (parts.length === 3) {
+                // new Date(ano, mês-1, dia)
+                dateObject = new Date(parts[2], parts[1] - 1, parts[0]);
+            } else {
+                console.error(`Erro em /api/users/verify-identity: Formato de data (com /) inválido. Recebido: ${birthDate}`);
+                return res.status(400).json({ message: 'Formato de data inválido. Use DD/MM/AAAA.' });
+            }
+        } else {
+            // Formato desconhecido
+            console.error(`Erro em /api/users/verify-identity: Formato de data totalmente desconhecido. Recebido: ${birthDate}`);
+            return res.status(400).json({ message: 'Formato de data desconhecido.' });
         }
-        dateObject = new Date(parts[2], parts[1] - 1, parts[0]);
-        // --- FIM DA CORREÇÃO DEFENSIVA ---
+        // --- FIM DA CORREÇÃO FINAL DA DATA ---
 
         const user = await User.findOne({ email, birthDate: dateObject });
         if (!user) {
@@ -182,14 +204,10 @@ app.delete('/api/users/me/:id', async (req, res) => {
 
 
 // --- ROTAS DE EVENTOS ---
-// NOTA: Se você também envia datas nas rotas de eventos,
-// você precisará aplicar a mesma lógica de verificação de data aqui.
-
 app.post('/api/events', async (req, res) => {
     try {
         const { userId, eventName, venue, dateTime, value, status, description } = req.body;
-        // ATENÇÃO: Se 'dateTime' também vier como string (ex: "DD/MM/AAAA HH:mm"),
-        // você precisará de uma lógica de conversão similar à de 'birthDate'.
+        // ATENÇÃO: Se 'dateTime' também vier como string, precisará da mesma lógica de data acima
         const newEvent = new Event({ userId, eventName, venue, dateTime, value, status, description });
         await newEvent.save();
         res.status(201).json(newEvent);
